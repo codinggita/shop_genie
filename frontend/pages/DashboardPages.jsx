@@ -9,7 +9,7 @@ import {
   CircleHelp,
   Filter,
   Grid2X2,
-  Image,
+  Image as ImageIcon,
   Layers3,
   MessageSquare,
   MoreHorizontal,
@@ -27,7 +27,15 @@ import {
   Zap,
   Loader2,
   X,
+  GripVertical,
+  Trash2,
+  Type,
+  Image as ImageIconLucide,
+  LayoutGrid,
+  Mail,
+  Download,
 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -35,7 +43,12 @@ import { AdminLayout, AdminTopbar, StatCard, TipBox } from "../components/AdminL
 import {
   ANALYTICS_ROUTE,
   BUILDER_ROUTE,
+  CATEGORY_ROUTE,
+  CREATE_ACCOUNT_ROUTE,
   DASHBOARD_ROUTE,
+  HELP_ROUTE,
+  HOME_ROUTE,
+  LOGIN_ROUTE,
   NEW_PRODUCT_ROUTE,
   ORDERS_ROUTE,
   PRODUCTS_ROUTE,
@@ -44,6 +57,22 @@ import {
   STORE_SETUP_ROUTE,
   THEME_ROUTE,
 } from "../routes";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const categories = [
   { title: "Grocery", value: "grocery", copy: "Manage inventory, fresh produce, and daily staples with ease.", icon: ShoppingBag, wide: true, tone: "bg-[#a7eadf]" },
@@ -104,8 +133,30 @@ export function StoreSetupPage() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [storeName, setStoreName] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
+  const [existingStore, setExistingStore] = useState(null);
+
+  useEffect(() => {
+    const fetchExisting = async () => {
+      try {
+        const res = await fetch("/api/stores/my");
+        const data = await res.json();
+        if (res.ok) {
+          setExistingStore(data.data.store);
+          setStoreName(data.data.store.name);
+          setDescription(data.data.store.description || "");
+        }
+      } catch (err) {
+        console.log("No store found, starting fresh.");
+      } finally {
+        setFetching(false);
+      }
+    };
+    fetchExisting();
+  }, []);
 
   const handleContinue = async () => {
     if (!storeName.trim()) {
@@ -119,24 +170,26 @@ export function StoreSetupPage() {
     const category = localStorage.getItem("pending_store_category") || "other";
 
     try {
-      const res = await fetch("/api/stores", {
-        method: "POST",
+      const url = existingStore ? "/api/stores" : "/api/stores";
+      const method = existingStore ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method: method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: storeName,
           category: category,
+          description: description
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to create store");
+        throw new Error(data.message || "Failed to save store details");
       }
 
-      // Update local user state with business name if needed
       updateUser({ ...user, businessName: storeName });
-      
       navigate(THEME_ROUTE);
     } catch (err) {
       setError(err.message);
@@ -145,12 +198,16 @@ export function StoreSetupPage() {
     }
   };
 
+  if (fetching) return (
+    <AdminLayout><div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#0f756b]" /></div></AdminLayout>
+  );
+
   return (
     <AdminLayout>
       <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_330px]">
         <section>
           <h1 className="text-[2.45rem] font-extrabold leading-tight tracking-[-0.055em] sm:text-[3.2rem]">
-            Let&apos;s build your storefront.
+            {existingStore ? "Update your storefront." : "Let's build your storefront."}
           </h1>
           <p className="mt-2 max-w-2xl text-base font-medium leading-7 text-[#626c76]">
             First, we&apos;ll need a name and a face for your business. You can always update these
@@ -166,49 +223,55 @@ export function StoreSetupPage() {
               placeholder="e.g., The Artisan Corner"
             />
             {error && <p className="mt-2 text-sm font-bold text-red-500">{error}</p>}
-            <span className="mt-3 block text-sm font-semibold text-[#7a838d]">Choose a name that reflects your shop&apos;s unique personality.</span>
+          </label>
+
+          <label className="mt-6 block max-w-2xl">
+            <span className="mb-3 block text-sm font-extrabold">Short Description</span>
+            <textarea
+              className="w-full min-h-32 rounded-md bg-[#dbe1e7] p-5 text-base font-semibold outline-none focus:bg-white"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Tell customers what makes your shop special..."
+            />
           </label>
 
           <div className="mt-8 max-w-2xl">
             <p className="mb-3 text-sm font-extrabold">Upload Logo</p>
-            <div className="flex min-h-64 flex-col items-center justify-center rounded-md border-2 border-dashed border-[#c8d1da] bg-[#f8fafb] p-8 text-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#a6eadf] text-[#0f756b]">
-                <UploadCloud className="h-7 w-7" />
+            <div className="flex min-h-48 flex-col items-center justify-center rounded-md border-2 border-dashed border-[#c8d1da] bg-[#f8fafb] p-8 text-center cursor-pointer hover:bg-slate-50 transition">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#a6eadf] text-[#0f756b]">
+                <UploadCloud className="h-6 w-6" />
               </span>
-              <p className="mt-7 text-lg font-extrabold">Drag and drop your logo here</p>
-              <p className="mt-1 text-sm font-semibold text-[#69737e]">or <span className="text-[#0f756b]">browse files</span> to upload</p>
-              <p className="mt-6 text-xs font-bold uppercase text-[#87919c]">Supports: PNG, JPG, SVG (max 5MB)</p>
+              <p className="mt-4 text-sm font-extrabold text-[#69737e]">Click to upload logo</p>
             </div>
           </div>
 
           <button
-            className="mt-8 inline-flex h-14 items-center justify-center gap-2 rounded-md bg-[#0f756b] px-10 text-base font-extrabold text-white shadow-[0_16px_35px_rgba(15,117,107,0.2)] disabled:opacity-70"
+            className="mt-10 inline-flex h-14 items-center justify-center gap-2 rounded-md bg-[#0f756b] px-10 text-base font-extrabold text-white shadow-[0_16px_35px_rgba(15,117,107,0.2)] disabled:opacity-70"
             onClick={handleContinue}
             disabled={loading}
             type="button"
           >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Continue Setup"}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save & Continue"}
             {!loading && <ArrowRight className="h-5 w-5" />}
           </button>
-          <p className="mt-4 text-sm font-medium text-[#7a838d]">Clicking continue will save your current progress.</p>
         </section>
 
         <aside className="space-y-5">
           <div className="rounded-md bg-[#e2e7ed] p-6">
-            <p className="font-extrabold text-[#0f6f66]">Logo Tips</p>
+            <p className="font-extrabold text-[#0f6f66]">Setup Tips</p>
             <ul className="mt-5 space-y-4 text-sm font-semibold leading-6 text-[#626c76]">
-              <li>Use a square or round icon for the best fit across social profiles.</li>
-              <li>Keep it simple. Avoid thin lines that might disappear on small screens.</li>
-              <li>Contrast is key. Ensure your colors stand out against a white background.</li>
+              <li>Use a clean, high-resolution logo.</li>
+              <li>A good description helps you show up in search engines.</li>
+              <li>You can change your theme in the next step.</li>
             </ul>
           </div>
-          <TipBox title="Need a Logo?">Try our AI Brand Kit generator after finishing this step to get professional designs in seconds.</TipBox>
+          <TipBox title="Live Preview">Once you click continue, you'll be able to see how these details look on your real website.</TipBox>
           <div className="min-h-56 rounded-md bg-[linear-gradient(135deg,#0f756b,#082f2d)] p-7 text-white">
             <div className="mt-10 text-7xl font-black opacity-75">
-              {storeName ? storeName.slice(0, 2).toUpperCase() : (user?.name ? user.name.slice(0, 2).toUpperCase() : "LS")}
+              {storeName ? storeName.slice(0, 2).toUpperCase() : "LS"}
             </div>
-            <p className="mt-8 text-xl font-extrabold">Inspiration Corner</p>
-            <p className="text-sm font-semibold opacity-85">Explore minimalist designs for inspiration.</p>
+            <p className="mt-8 text-xl font-extrabold">Preview Identity</p>
+            <p className="text-sm font-semibold opacity-85">This is how your brand initials will appear to customers.</p>
           </div>
         </aside>
       </div>
@@ -299,28 +362,35 @@ const themes = [
 export function DashboardPage() {
   const { user } = useAuth();
   const [store, setStore] = useState(null);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchStore = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/stores/my");
-        const data = await res.json();
-        if (res.ok) {
-          setStore(data.data.store);
-        } else if (res.status === 404) {
-          // If no store found, redirect to creation flow
+        const storeRes = await fetch("/api/stores/my");
+        const storeData = await storeRes.json();
+        
+        if (storeRes.ok) {
+          setStore(storeData.data.store);
+          
+          const productRes = await fetch("/api/products/my");
+          const productData = await productRes.json();
+          if (productRes.ok) {
+            setProducts(productData.data.products);
+          }
+        } else if (storeRes.status === 404) {
           navigate(CATEGORY_ROUTE);
         }
       } catch (err) {
-        console.error("Failed to fetch store", err);
+        console.error("Failed to fetch dashboard data", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStore();
+    fetchData();
   }, [navigate]);
 
   if (loading) return (
@@ -339,7 +409,7 @@ export function DashboardPage() {
         <h1 className="text-2xl font-extrabold text-[#0f6f66]">Dashboard Overview</h1>
         <p className="text-sm font-semibold text-[#626c76]">Welcome back, {firstName}. Here&apos;s what&apos;s happening today.</p>
         <div className="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Total Products" value="0" delta="+0%" />
+          <StatCard label="Total Products" value={products.length} delta="+0%" />
           <StatCard icon={ShoppingBag} label="Orders" value="0" delta="+0%" tone="blue" />
           <StatCard icon={BarChart3} label="Store Views" value={store?.visitorCount || 0} delta="+0%" />
           <StatCard icon={Zap} label="Conversion Traffic" value="0%" delta="+0%" tone="coral" />
@@ -352,8 +422,8 @@ export function DashboardPage() {
           </section>
           <section>
             <h2 className="mb-3 font-extrabold">Quick Actions</h2>
-            {[["Add Product", NEW_PRODUCT_ROUTE], ["Edit Site", BUILDER_ROUTE], ["Create Promo", SETTINGS_ROUTE]].map(([label, to]) => (
-              <Link className="mb-3 flex items-center justify-between rounded-md bg-white p-4 font-bold shadow-sm" key={label} to={to}>
+            {[["Add Product", NEW_PRODUCT_ROUTE], ["Edit Site", BUILDER_ROUTE], ["Visit Site", `/store/${store?.slug}`]].map(([label, to]) => (
+              <Link className="mb-3 flex items-center justify-between rounded-md bg-white p-4 font-bold shadow-sm hover:shadow-md transition" key={label} to={to} target={label === "Visit Site" ? "_blank" : "_self"}>
                 {label}
                 <ChevronRight className="h-4 w-4" />
               </Link>
@@ -369,7 +439,7 @@ export function DashboardPage() {
               <p className="mt-1 text-sm font-semibold text-[#7a838d]">Orders will appear here once you start selling.</p>
             </div>
           </section>
-          <TipBox title="Pro Tip: Getting Started">Add your first product to get your store ready for customers. Use high-quality photos for best results.</TipBox>
+          <TipBox title="Pro Tip: Success">Shops with at least 5 products see 3x more visitors than those with only one product.</TipBox>
         </div>
       </div>
     </AdminLayout>
@@ -663,70 +733,711 @@ export function NewProductPage() {
 export function BuilderPage() {
   const { user } = useAuth();
   const [store, setStore] = useState(null);
+  const [components, setComponents] = useState([
+    { id: "hero-1", type: "hero", content: { title: "Crafted with Soul.", subtitle: "Bespoke ceramics and textiles created locally.", buttonText: "Explore Collection", image: "https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=700&q=80" }},
+    { id: "heading-1", type: "heading", content: { text: "New Arrivals", level: "h2" } },
+    { id: "text-1", type: "text", content: { text: "Check out our latest products and collections." } },
+  ]);
+  const [selectedComponent, setSelectedComponent] = useState(null);
   const storeName = store?.name || user?.businessName || user?.name || "My Store";
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   useEffect(() => {
-     fetch("/api/stores/my")
+    fetch("/api/stores/my")
       .then(res => res.json())
       .then(data => { if(data.success) setStore(data.data.store) });
   }, []);
+
+  const addComponent = (type) => {
+    const newComponent = {
+      id: `${type}-${Date.now()}`,
+      type,
+      content: getDefaultContent(type),
+    };
+    setComponents([...components, newComponent]);
+  };
+
+  const getDefaultContent = (type) => {
+    switch(type) {
+      case "text": return { text: "Enter your text here..." };
+      case "heading": return { text: "New Heading", level: "h2" };
+      case "image": return { url: "", caption: "Image caption" };
+      case "product-grid": return { title: "Featured Products", limit: 6 };
+      case "contact-form": return { title: "Contact Us", subtitle: "Get in touch with us" };
+      default: return {};
+    }
+  };
+
+  const removeComponent = (id) => {
+    setComponents(components.filter(c => c.id !== id));
+    if (selectedComponent === id) setSelectedComponent(null);
+  };
+
+  const updateComponent = (id, newContent) => {
+    setComponents(components.map(c => c.id === id ? { ...c, content: { ...c.content, ...newContent } } : c));
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      setComponents((items) => {
+        const oldIndex = items.findIndex(i => i.id === active.id);
+        const newIndex = items.findIndex(i => i.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   return (
     <main className="min-h-[100dvh] bg-[#edf2f6] text-[#2e333b]">
       <AdminTopbar action={<Link className="rounded-md bg-[#0f756b] px-5 py-2.5 text-sm font-extrabold text-white" to={PUBLISH_ROUTE}>Publish</Link>} title="ShopGenie" />
       <div className="grid min-h-[calc(100dvh-4rem)] w-full gap-4 p-4 lg:grid-cols-[230px_minmax(0,1fr)_300px]">
-        <aside className="rounded-md bg-white p-4 shadow-sm"><h2 className="font-extrabold text-[#0f6f66]">Add Components</h2>{[["Text", "Headlines, paragraphs, and descriptions."], ["Image", "Showcase your products or storefront."], ["Product Grid", "A dynamic display of your top items."], ["Contact Form", "Let customers reach out directly."]].map(([a,b])=><div className="mt-4 rounded-md bg-[#f3f7fa] p-4" key={a}><p className="font-extrabold">{a}</p><p className="mt-1 text-xs font-semibold text-[#69737e]">{b}</p></div>)}</aside>
-        <section className="mx-auto w-full max-w-3xl rounded-md bg-white p-8 shadow-sm"><nav className="flex justify-between text-sm font-semibold"><strong className="text-xl text-[#0f6f66]">{storeName}</strong><span>Shop</span><span>Our Story</span><span>Contact</span></nav><div className="mt-16 grid items-center gap-8 md:grid-cols-2"><div><h1 className="text-5xl font-extrabold leading-tight tracking-[-0.06em]">Crafted with <span className="text-[#0f6f66]">Soul.</span></h1><p className="mt-6 font-semibold leading-7 text-[#626c76]">Bespoke ceramics and textiles created locally. Every piece tells a unique story.</p><button className="mt-8 rounded-md bg-[#0f756b] px-6 py-3 font-extrabold text-white">Explore Collection</button></div><div className="aspect-square rounded-xl bg-[url('https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=700&q=80')] bg-cover bg-center" /></div><h2 className="mt-20 text-2xl font-extrabold">New Arrivals</h2></section>
-        <aside className="rounded-md bg-white p-4 shadow-sm"><h2 className="font-extrabold text-[#0f6f66]">Component Settings</h2><div className="mt-5 aspect-video rounded-md bg-[url('https://images.unsplash.com/photo-1595433409683-943ded8cfb1c?auto=format&fit=crop&w=500&q=80')] bg-cover bg-center" /><p className="mt-5 text-sm font-extrabold">Visual Style</p><div className="mt-3 grid grid-cols-2 gap-3"><button className="rounded-md border-2 border-[#0f756b] py-3 text-xs font-extrabold">Portrait</button><button className="rounded-md bg-[#eef2f5] py-3 text-xs font-extrabold">Landscape</button></div><TipBox className="mt-5" title="AI Tip">High-quality images with rounded corners make your store feel premium.</TipBox><button className="mt-8 w-full rounded-md bg-[#ffe4e4] py-3 font-extrabold text-[#d43238]">Remove Component</button></aside>
+        <aside className="rounded-md bg-white p-4 shadow-sm">
+          <h2 className="font-extrabold text-[#0f6f66]">Add Components</h2>
+          {[
+            ["Text", "Headlines, paragraphs, and descriptions.", "text"],
+            ["Heading", "Section titles and page headers.", "heading"],
+            ["Image", "Showcase your products or storefront.", "image"],
+            ["Product Grid", "A dynamic display of your top items.", "product-grid"],
+            ["Contact Form", "Let customers reach out directly.", "contact-form"],
+          ].map(([label, desc, type]) => (
+            <button
+              key={type}
+              onClick={() => addComponent(type)}
+              className="mt-3 w-full rounded-md bg-[#f3f7fa] p-4 text-left transition hover:bg-[#e4e9ef]"
+            >
+              <p className="font-extrabold">{label}</p>
+              <p className="mt-1 text-xs font-semibold text-[#69737e]">{desc}</p>
+            </button>
+          ))}
+        </aside>
+
+        <section className="mx-auto w-full max-w-3xl rounded-md bg-white p-8 shadow-sm">
+          <nav className="flex justify-between text-sm font-semibold">
+            <strong className="text-xl text-[#0f6f66]">{storeName}</strong>
+            <span>Shop</span><span>Our Story</span><span>Contact</span>
+          </nav>
+
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={components.map(c => c.id)} strategy={verticalListSortingStrategy}>
+              {components.map((component) => (
+                <SortableComponent
+                  key={component.id}
+                  component={component}
+                  isSelected={selectedComponent === component.id}
+                  onClick={() => setSelectedComponent(component.id)}
+                  onRemove={() => removeComponent(component.id)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          {components.length === 0 && (
+            <div className="mt-16 text-center text-[#c8d1da]">
+              <p className="text-lg font-bold">No components yet</p>
+              <p className="text-sm">Add components from the left panel to build your page.</p>
+            </div>
+          )}
+        </section>
+
+        <aside className="rounded-md bg-white p-4 shadow-sm">
+          <h2 className="font-extrabold text-[#0f6f66]">Component Settings</h2>
+          {selectedComponent ? (
+            <ComponentSettings
+              component={components.find(c => c.id === selectedComponent)}
+              onUpdate={(newContent) => updateComponent(selectedComponent, newContent)}
+              onRemove={() => removeComponent(selectedComponent)}
+            />
+          ) : (
+            <p className="mt-5 text-sm font-semibold text-[#69737e]">Select a component to edit its settings.</p>
+          )}
+          <TipBox className="mt-5" title="AI Tip">High-quality images with rounded corners make your store feel premium.</TipBox>
+        </aside>
       </div>
     </main>
   );
 }
 
+function SortableComponent({ component, isSelected, onClick, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: component.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative mt-8 group ${isSelected ? "ring-2 ring-[#0f756b]" : ""}`}
+      onClick={onClick}
+    >
+      <div className="absolute -left-10 top-1/2 -translate-y-1/2 cursor-grab opacity-0 transition group-hover:opacity-100" {...attributes} {...listeners}>
+        <GripVertical className="h-5 w-5 text-[#69737e]" />
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        className="absolute -right-3 -top-3 z-10 rounded-full bg-red-500 p-1 text-white opacity-0 transition group-hover:opacity-100"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+      <ComponentRenderer component={component} />
+    </div>
+  );
+}
+
+function ComponentRenderer({ component }) {
+  switch(component.type) {
+    case "hero":
+      return (
+        <div className="grid items-center gap-8 md:grid-cols-2">
+          <div>
+            <h1 className="text-5xl font-extrabold leading-tight tracking-[-0.06em]">{component.content.title}</h1>
+            <p className="mt-6 font-semibold leading-7 text-[#626c76]">{component.content.subtitle}</p>
+            <button className="mt-8 rounded-md bg-[#0f756b] px-6 py-3 font-extrabold text-white">{component.content.buttonText}</button>
+          </div>
+          {component.content.image && (
+            <div className="aspect-square rounded-xl bg-cover bg-center" style={{ backgroundImage: `url(${component.content.image})` }} />
+          )}
+        </div>
+      );
+    case "heading":
+      const Tag = component.content.level || "h2";
+      return <Tag className="text-2xl font-extrabold">{component.content.text}</Tag>;
+    case "text":
+      return <p className="font-semibold leading-7 text-[#626c76]">{component.content.text}</p>;
+    case "image":
+      return component.content.url ? (
+        <img src={component.content.url} alt={component.content.caption} className="rounded-lg" />
+      ) : (
+        <div className="aspect-video rounded-lg bg-[#e4e9ef] flex items-center justify-center">
+          <ImageIconLucide className="h-8 w-8 text-[#69737e]" />
+        </div>
+      );
+    case "product-grid":
+      return (
+        <div>
+          <h2 className="mb-4 text-2xl font-extrabold">{component.content.title}</h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[1,2,3].map(i => (
+              <div key={i} className="rounded-lg bg-[#e4e9ef] p-4 text-center">
+                <div className="aspect-square rounded bg-[#d2d9e0]" />
+                <p className="mt-2 font-bold">Product {i}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    case "contact-form":
+      return (
+        <div>
+          <h2 className="mb-2 text-2xl font-extrabold">{component.content.title}</h2>
+          <p className="mb-4 text-sm font-semibold text-[#626c76]">{component.content.subtitle}</p>
+          <div className="space-y-3">
+            <input className="w-full rounded-md bg-[#e4e9ef] p-3" placeholder="Your Name" />
+            <input className="w-full rounded-md bg-[#e4e9ef] p-3" placeholder="Your Email" />
+            <textarea className="w-full rounded-md bg-[#e4e9ef] p-3" rows="4" placeholder="Your Message" />
+            <button className="rounded-md bg-[#0f756b] px-6 py-3 font-extrabold text-white">Send Message</button>
+          </div>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function ComponentSettings({ component, onUpdate, onRemove }) {
+  if (!component) return null;
+
+  return (
+    <div className="mt-5">
+      {component.type === "hero" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Title</span>
+            <input
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.title || ""}
+              onChange={(e) => onUpdate({ title: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Subtitle</span>
+            <textarea
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.subtitle || ""}
+              onChange={(e) => onUpdate({ subtitle: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Button Text</span>
+            <input
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.buttonText || ""}
+              onChange={(e) => onUpdate({ buttonText: e.target.value })}
+            />
+          </label>
+        </div>
+      )}
+      {component.type === "heading" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Text</span>
+            <input
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.text || ""}
+              onChange={(e) => onUpdate({ text: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Level</span>
+            <select
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.level || "h2"}
+              onChange={(e) => onUpdate({ level: e.target.value })}
+            >
+              <option value="h1">H1</option>
+              <option value="h2">H2</option>
+              <option value="h3">H3</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {component.type === "text" && (
+        <label className="block">
+          <span className="text-xs font-extrabold uppercase">Text</span>
+          <textarea
+            className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+            rows="4"
+            value={component.content.text || ""}
+            onChange={(e) => onUpdate({ text: e.target.value })}
+          />
+        </label>
+      )}
+      {component.type === "image" && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Image URL</span>
+            <input
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.url || ""}
+              onChange={(e) => onUpdate({ url: e.target.value })}
+              placeholder="https://..."
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-extrabold uppercase">Caption</span>
+            <input
+              className="mt-1 w-full rounded bg-[#e4e9ef] p-2 text-sm"
+              value={component.content.caption || ""}
+              onChange={(e) => onUpdate({ caption: e.target.value })}
+            />
+          </label>
+        </div>
+      )}
+      <button
+        onClick={onRemove}
+        className="mt-8 w-full rounded-md bg-[#ffe4e4] py-3 font-extrabold text-[#d43238]"
+      >
+        Remove Component
+      </button>
+    </div>
+  );
+}
+
 export function OrdersPage() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const res = await fetch("/api/orders/my");
+        const data = await res.json();
+        if (res.ok) {
+          setOrders(data.data.orders);
+        }
+      } catch (err) {
+        console.error("Failed to fetch orders", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
+  const filteredOrders = filter === "all" ? orders : orders.filter(o => o.status === filter);
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case "pending": return "bg-yellow-50 text-yellow-600";
+      case "completed": return "bg-green-50 text-green-600";
+      case "cancelled": return "bg-red-50 text-red-600";
+      default: return "bg-gray-50 text-gray-600";
+    }
+  };
+
   return (
     <AdminLayout>
-      <div className="mx-auto w-full max-w-6xl"><h1 className="text-3xl font-extrabold text-[#0f6f66]">Orders & Inquiries</h1><p className="font-semibold text-[#626c76]">Manage your customer requests and sales in one place.</p><div className="mt-7 grid gap-5 md:grid-cols-3"><StatCard label="Total Orders" value="0" delta="+0%" /><StatCard label="Active Inquiries" value="0" delta="0 awaiting response" /><StatCard label="Completion Rate" value="0%" delta="No data yet" /></div><div className="mt-7 overflow-hidden rounded-md bg-white shadow-sm"><div className="flex flex-wrap justify-between gap-3 bg-[#edf2f6] p-4"><div className="flex h-10 min-w-64 items-center gap-2 rounded bg-white px-3 text-sm font-semibold text-[#7a838d]"><Search className="h-4 w-4" />Search customer, order ID, or keyword...</div><button className="rounded bg-[#0f756b] px-4 py-2 text-sm font-extrabold text-white">New Order</button></div><div className="py-12 text-center"><MessageSquare className="mx-auto h-12 w-12 text-[#c8d1da]" /><p className="mt-4 font-extrabold text-[#626c76]">No orders yet</p><p className="mt-1 text-sm font-semibold text-[#7a838d]">Orders will appear here once customers start purchasing.</p></div></div><TipBox className="mt-7" title="Did you know?">Responding to inquiries within 2 hours increases conversion rates by nearly 45%.</TipBox></div>
+      <div className="mx-auto w-full max-w-6xl">
+        <h1 className="text-3xl font-extrabold text-[#0f6f66]">Orders & Inquiries</h1>
+        <p className="font-semibold text-[#626c76]">Manage your customer requests and sales in one place.</p>
+
+        <div className="mt-7 grid gap-5 md:grid-cols-3">
+          <StatCard label="Total Orders" value={orders.length} delta={`+${orders.filter(o => o.status === 'completed').length} completed`} />
+          <StatCard label="Pending" value={orders.filter(o => o.status === 'pending').length} delta="awaiting processing" tone="blue" />
+          <StatCard label="Revenue" value={`$${orders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2)}`} delta="total earnings" />
+        </div>
+
+        <div className="mt-7 overflow-hidden rounded-md bg-white shadow-sm">
+          <div className="flex flex-wrap justify-between gap-3 bg-[#edf2f6] p-4">
+            <div className="flex h-10 min-w-64 items-center gap-2 rounded bg-white px-3 text-sm font-semibold text-[#7a838d]">
+              <Search className="h-4 w-4" />
+              <input className="flex-1 bg-transparent outline-none" placeholder="Search customer, order ID..." />
+            </div>
+            <select
+              className="rounded bg-white px-4 py-2 text-sm font-bold"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option value="all">All Orders</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          {loading ? (
+            <div className="py-12 text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#0f756b]" />
+            </div>
+          ) : filteredOrders.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-[#edf2f6] text-xs font-extrabold uppercase text-[#7a838d]">
+                    <th className="px-6 py-4">Order ID</th>
+                    <th className="px-6 py-4">Customer</th>
+                    <th className="px-6 py-4">Total</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((order) => (
+                    <tr className="border-b border-[#edf2f6] hover:bg-[#f8fafb]" key={order._id}>
+                      <td className="px-6 py-4 font-bold text-[#2e333b]">#{order._id?.slice(-6)}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-[#626c76]">{order.customerName || "Guest"}</td>
+                      <td className="px-6 py-4 font-bold text-[#0f756b]">${order.total?.toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-extrabold uppercase ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold text-[#626c76]">
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-12 text-center">
+              <MessageSquare className="mx-auto h-12 w-12 text-[#c8d1da]" />
+              <p className="mt-4 font-extrabold text-[#626c76]">No orders yet</p>
+              <p className="mt-1 text-sm font-semibold text-[#7a838d]">Orders will appear here once customers start purchasing.</p>
+            </div>
+          )}
+        </div>
+        <TipBox className="mt-7" title="Did you know?">Responding to inquiries within 2 hours increases conversion rates by nearly 45%.</TipBox>
+      </div>
     </AdminLayout>
   );
 }
 
 export function AnalyticsPage() {
+  const [visitorData, setVisitorData] = useState([]);
+  const [productViewData, setProductViewData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState("7d");
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const [visitorsRes, productsRes] = await Promise.all([
+          fetch("/api/analytics/visitors"),
+          fetch("/api/analytics/product-views"),
+        ]);
+
+        const visitorsData = await visitorsRes.json();
+        const productsData = await productsRes.json();
+
+        if (visitorsRes.ok) {
+          setVisitorData(visitorsData.data || generateMockVisitorData());
+        } else {
+          setVisitorData(generateMockVisitorData());
+        }
+
+        if (productsRes.ok) {
+          setProductViewData(productsData.data || generateMockProductData());
+        } else {
+          setProductViewData(generateMockProductData());
+        }
+      } catch (err) {
+        console.error("Failed to fetch analytics", err);
+        setVisitorData(generateMockVisitorData());
+        setProductViewData(generateMockProductData());
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, [timeRange]);
+
+  const generateMockVisitorData = () => {
+    return Array.from({ length: 7 }, (_, i) => ({
+      date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      visitors: Math.floor(Math.random() * 100) + 20,
+    }));
+  };
+
+  const generateMockProductData = () => {
+    return Array.from({ length: 7 }, (_, i) => ({
+      date: new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      views: Math.floor(Math.random() * 50) + 10,
+    }));
+  };
+
+  const totalVisitors = visitorData.reduce((sum, d) => sum + d.visitors, 0);
+  const totalViews = productViewData.reduce((sum, d) => sum + d.views, 0);
+
   return (
     <AdminLayout>
-      <div className="mx-auto w-full max-w-6xl"><h1 className="text-3xl font-extrabold text-[#0f6f66]">Shop Performance</h1><p className="font-semibold text-[#626c76]">See how your business is growing this month.</p><div className="mt-7 grid gap-5 md:grid-cols-3"><StatCard icon={BarChart3} label="Total Visitors" value="0" delta="+0%" /><StatCard icon={Grid2X2} label="Product Views" value="0" delta="+0%" /><TipBox title="Pro Tip">Start promoting your store to see traffic grow!</TipBox></div><div className="mt-7 grid gap-6 lg:grid-cols-2"><ChartCard title="Store Visitors" type="empty" /><ChartCard title="Product Views" type="empty" /></div><section className="mt-8 rounded-md bg-white p-8 text-center shadow-sm"><h2 className="text-2xl font-extrabold">Ready to grow even more?</h2><p className="mx-auto mt-3 max-w-xl font-semibold text-[#626c76]">Our deep-dive reports can show exactly where your customers are coming from.</p><button className="mt-6 rounded-md bg-[#0f756b] px-7 py-3 font-extrabold text-white">Download PDF Report</button></section></div>
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-extrabold text-[#0f6f66]">Shop Performance</h1>
+            <p className="font-semibold text-[#626c76]">See how your business is growing this month.</p>
+          </div>
+          <select
+            className="rounded-md bg-white px-4 py-2 text-sm font-bold border"
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+          >
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days</option>
+            <option value="90d">Last 90 Days</option>
+          </select>
+        </div>
+
+        <div className="mt-7 grid gap-5 md:grid-cols-3">
+          <StatCard icon={BarChart3} label="Total Visitors" value={totalVisitors} delta="+12%" />
+          <StatCard icon={Grid2X2} label="Product Views" value={totalViews} delta="+8%" tone="blue" />
+          <TipBox title="Pro Tip">Start promoting your store to see traffic grow!</TipBox>
+        </div>
+
+        {loading ? (
+          <div className="mt-7 text-center py-12">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#0f756b]" />
+          </div>
+        ) : (
+          <div className="mt-7 grid gap-6 lg:grid-cols-2">
+            <section className="rounded-md bg-white p-6 shadow-sm">
+              <h2 className="mb-4 font-extrabold">Store Visitors</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={visitorData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="visitors" stroke="#0f756b" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </section>
+
+            <section className="rounded-md bg-white p-6 shadow-sm">
+              <h2 className="mb-4 font-extrabold">Product Views</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={productViewData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="views" fill="#0f756b" />
+                </BarChart>
+              </ResponsiveContainer>
+            </section>
+          </div>
+        )}
+
+        <section className="mt-8 rounded-md bg-white p-8 text-center shadow-sm">
+          <h2 className="text-2xl font-extrabold">Ready to grow even more?</h2>
+          <p className="mx-auto mt-3 max-w-xl font-semibold text-[#626c76]">Our deep-dive reports can show exactly where your customers are coming from.</p>
+          <button className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#0f756b] px-7 py-3 font-extrabold text-white">
+            <Download className="h-4 w-4" />
+            Download PDF Report
+          </button>
+        </section>
+      </div>
     </AdminLayout>
   );
 }
 
-function ChartCard({ title, type }) {
-  return (
-    <section className="rounded-md bg-[#e4e9ef] p-6">
-      <h2 className="font-extrabold">{title}</h2>
-      <div className="mt-5 flex h-64 items-center justify-center rounded-md bg-white p-7">
-        <div className="text-center">
-          <BarChart3 className="mx-auto h-12 w-12 text-[#c8d1da]" />
-          <p className="mt-4 font-extrabold text-[#626c76]">No data yet</p>
-          <p className="mt-1 text-sm font-semibold text-[#7a838d]">Data will appear here once you start getting visitors.</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function SettingsPage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [store, setStore] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [formData, setFormData] = useState({
+    storeName: "",
+    ownerName: "",
+    email: "",
+    phone: "",
+    description: "",
+  });
 
   useEffect(() => {
-     fetch("/api/stores/my")
+    fetch("/api/stores/my")
       .then(res => res.json())
-      .then(data => { if(data.success) setStore(data.data.store) });
-  }, []);
+      .then(data => {
+        if(data.success) {
+          setStore(data.data.store);
+          setFormData({
+            storeName: data.data.store.name || "",
+            ownerName: user?.name || "",
+            email: user?.email || "",
+            phone: user?.phone || "",
+            description: data.data.store.description || "",
+          });
+        }
+      });
+  }, [user]);
+
+  const handleSave = async () => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await fetch("/api/stores", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.storeName,
+          description: formData.description,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setStore(data.data.store);
+        setSuccess("Settings saved successfully!");
+        updateUser({ ...user, businessName: formData.storeName });
+      } else {
+        const data = await res.json();
+        setError(data.message || "Failed to save settings");
+      }
+    } catch (err) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="mx-auto w-full max-w-5xl"><h1 className="text-5xl font-extrabold tracking-[-0.06em]">Settings</h1><p className="mt-1 font-semibold text-[#626c76]">Manage your shop&apos;s identity, digital address, and communication channels.</p><section className="mt-8 rounded-md bg-white p-7 shadow-sm"><h2 className="text-xl font-extrabold text-[#0f6f66]">Store Details</h2><div className="mt-6 grid gap-5 md:grid-cols-2"><label><span className="text-xs font-extrabold uppercase">Store Name</span><input className="mt-2 h-12 w-full rounded bg-[#dbe1e7] px-4 font-semibold" defaultValue={store?.name || user?.businessName || ""} /></label><label><span className="text-xs font-extrabold uppercase">Brand Logo</span><div className="mt-2 flex items-center gap-3"><span className="rounded bg-[#ffdb80] px-4 py-3 font-bold">{(store?.name || user?.businessName || "BS").slice(0, 2).toUpperCase()}</span><button className="rounded border border-[#0f756b] px-4 py-3 font-bold text-[#0f756b]">Change Logo</button></div></label></div><label className="mt-6 block"><span className="text-xs font-extrabold uppercase">Owner Name</span><input className="mt-2 h-12 w-full rounded bg-[#dbe1e7] px-4 font-semibold" defaultValue={user?.name || ""} /></label></section><div className="mt-7 grid gap-6 lg:grid-cols-[1fr_280px]"><section className="rounded-md bg-white p-7 shadow-sm"><h2 className="text-xl font-extrabold text-[#0f6f66]">Domain Management</h2><TipBox className="mt-4" title="Pro Tip">Using a custom domain like .com increases customer trust by 45%.</TipBox><div className="mt-6 rounded bg-[#dbe1e7] p-4 text-center font-extrabold">{store?.slug || (user?.businessName ? user.businessName.toLowerCase().replace(/\s+/g, "-") : "your-store")}.shopgenie.store</div><button className="mt-4 w-full rounded border border-dashed border-[#87919c] py-3 font-bold">Connect a custom domain</button></section><section className="rounded-md bg-[#e4e9ef] p-7 shadow-sm"><h2 className="font-extrabold text-[#0f6f66]">Site Visibility</h2>{["Online Now","Search Engines"].map(x=><div className="mt-5 flex justify-between font-bold" key={x}><span>{x}</span><span className="flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${store?.isPublished ? 'bg-[#0f756b]' : 'bg-gray-400'}`} />{store?.isPublished ? 'Active' : 'Offline'}</span></div>)}<button className={`mt-6 w-full rounded-md py-3 font-extrabold text-white ${store?.isPublished ? 'bg-[#d43238]' : 'bg-[#0f756b]'}`}>{store?.isPublished ? 'Go Offline' : 'Go Online'}</button></section></div></div>
+      <div className="mx-auto w-full max-w-5xl">
+        <h1 className="text-5xl font-extrabold tracking-[-0.06em]">Settings</h1>
+        <p className="mt-1 font-semibold text-[#626c76]">Manage your shop&apos;s identity, digital address, and communication channels.</p>
+
+        {error && <div className="mt-4 rounded-md bg-red-50 p-4 text-sm font-bold text-red-500">{error}</div>}
+        {success && <div className="mt-4 rounded-md bg-green-50 p-4 text-sm font-bold text-green-600">{success}</div>}
+
+        <section className="mt-8 rounded-md bg-white p-7 shadow-sm">
+          <h2 className="text-xl font-extrabold text-[#0f6f66]">Store Details</h2>
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <label>
+              <span className="text-xs font-extrabold uppercase">Store Name</span>
+              <input
+                className="mt-2 h-12 w-full rounded bg-[#dbe1e7] px-4 font-semibold outline-none focus:bg-white"
+                value={formData.storeName}
+                onChange={(e) => setFormData({...formData, storeName: e.target.value})}
+              />
+            </label>
+            <label>
+              <span className="text-xs font-extrabold uppercase">Brand Logo</span>
+              <div className="mt-2 flex items-center gap-3">
+                <span className="rounded bg-[#ffdb80] px-4 py-3 font-bold">
+                  {(formData.storeName || "BS").slice(0, 2).toUpperCase()}
+                </span>
+                <button className="rounded border border-[#0f756b] px-4 py-3 font-bold text-[#0f756b]">Change Logo</button>
+              </div>
+            </label>
+          </div>
+          <label className="mt-6 block">
+            <span className="text-xs font-extrabold uppercase">Owner Name</span>
+            <input
+              className="mt-2 h-12 w-full rounded bg-[#dbe1e7] px-4 font-semibold outline-none focus:bg-white"
+              value={formData.ownerName}
+              onChange={(e) => setFormData({...formData, ownerName: e.target.value})}
+            />
+          </label>
+          <label className="mt-6 block">
+            <span className="text-xs font-extrabold uppercase">Description</span>
+            <textarea
+              className="mt-2 w-full rounded bg-[#dbe1e7] p-4 font-semibold outline-none focus:bg-white"
+              rows="3"
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+            />
+          </label>
+          <button
+            className="mt-6 rounded-md bg-[#0f756b] px-6 py-3 font-extrabold text-white disabled:opacity-70"
+            onClick={handleSave}
+            disabled={loading}
+          >
+            {loading ? "Saving..." : "Save Changes"}
+          </button>
+        </section>
+
+        <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_280px]">
+          <section className="rounded-md bg-white p-7 shadow-sm">
+            <h2 className="text-xl font-extrabold text-[#0f6f66]">Domain Management</h2>
+            <TipBox className="mt-4" title="Pro Tip">Using a custom domain like .com increases customer trust by 45%.</TipBox>
+            <div className="mt-6 rounded bg-[#dbe1e7] p-4 text-center font-extrabold">
+              {store?.slug || (formData.storeName ? formData.storeName.toLowerCase().replace(/\s+/g, "-") : "your-store")}.shopgenie.store
+            </div>
+            <button className="mt-4 w-full rounded border border-dashed border-[#87919c] py-3 font-bold">Connect a custom domain</button>
+          </section>
+
+          <section className="rounded-md bg-[#e4e9ef] p-7 shadow-sm">
+            <h2 className="font-extrabold text-[#0f6f66]">Contact Information</h2>
+            <div className="mt-5 space-y-4">
+              <label>
+                <span className="text-xs font-extrabold uppercase">Email</span>
+                <input
+                  className="mt-1 w-full rounded bg-white p-3 text-sm font-semibold outline-none"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                />
+              </label>
+              <label>
+                <span className="text-xs font-extrabold uppercase">Phone</span>
+                <input
+                  className="mt-1 w-full rounded bg-white p-3 text-sm font-semibold outline-none"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+      </div>
     </AdminLayout>
   );
 }

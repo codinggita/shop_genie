@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Info, MessageCircleMore } from "lucide-react";
+import { ArrowRight, Info, MessageCircleMore, Apple } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import BrandLogo from "../components/BrandLogo";
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ identifier: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
@@ -48,6 +49,42 @@ export default function LoginPage() {
     },
     onError: () => setError("Google login was unsuccessful"),
   });
+
+  const handleAppleLogin = async () => {
+    setAppleLoading(true);
+    setError("");
+    
+    try {
+      // In a real implementation, you would use Apple's Sign In with Apple JS SDK
+      // For now, we'll simulate with a mock Apple user ID
+      // You need to integrate Apple's Sign In with Apple SDK for production
+      
+      // Simulating Apple Sign In response
+      const mockAppleUserId = `apple_${Date.now()}`;
+      
+      const res = await fetch("/api/auth/apple", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          appleUserId: mockAppleUserId,
+          email: null,
+          name: null
+        }),
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        updateUser(data.data.user);
+        navigate(DASHBOARD_ROUTE);
+      } else {
+        setError(data.message || "Apple login failed");
+      }
+    } catch (err) {
+      setError("Something went wrong with Apple login");
+    } finally {
+      setAppleLoading(false);
+    }
+  };
 
   const handleResendVerification = async () => {
     setResending(true);
@@ -187,23 +224,30 @@ export default function LoginPage() {
               <span className="h-px flex-1 bg-[#e7eaee]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                className="flex items-center justify-center gap-3 h-12 rounded-md bg-[#d9dee4] text-sm font-extrabold text-[#4c535d] transition hover:bg-[#cfd5dc]"
-                onClick={() => googleLogin()}
-                type="button"
-                disabled={loading}
-              >
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="h-5 w-5" alt="Google" />
-                Google
-              </button>
-              <button
-                className="h-12 rounded-md bg-[#d9dee4] text-sm font-extrabold text-[#4c535d] transition hover:bg-[#cfd5dc]"
-                type="button"
-              >
-                Apple
-              </button>
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  className="flex items-center justify-center gap-3 h-12 rounded-md bg-[#d9dee4] text-sm font-extrabold text-[#4c535d] transition hover:bg-[#cfd5dc]"
+                  onClick={() => googleLogin()}
+                  type="button"
+                  disabled={loading}
+                >
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="h-5 w-5" alt="Google" />
+                  Google
+                </button>
+                <button
+                  className="flex items-center justify-center gap-3 h-12 rounded-md bg-[#d9dee4] text-sm font-extrabold text-[#4c535d] transition hover:bg-[#cfd5dc]"
+                  onClick={handleAppleLogin}
+                  type="button"
+                  disabled={appleLoading}
+                >
+                  {appleLoading ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#4c535d] border-t-transparent" />
+                  ) : (
+                    <Apple className="h-5 w-5" />
+                  )}
+                  Apple
+                </button>
+              </div>
 
             <p className="mt-8 text-center text-sm font-medium text-[#6f7680]">
               New to ShopGenie?{" "}
