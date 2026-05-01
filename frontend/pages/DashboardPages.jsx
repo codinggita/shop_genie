@@ -439,6 +439,9 @@ export function DashboardPage() {
 export function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -456,6 +459,13 @@ export function ProductsPage() {
     fetchProducts();
   }, []);
 
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch = searchQuery === "" || p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
   return (
     <AdminLayout action={<Link className="hidden rounded-md bg-[#0f756b] px-5 py-2.5 text-sm font-extrabold text-white sm:inline-flex" to={NEW_PRODUCT_ROUTE}>Add New Product</Link>} search>
       <div className="mx-auto w-full max-w-6xl">
@@ -470,14 +480,42 @@ export function ProductsPage() {
         </div>
         
         <section className="mt-7 overflow-hidden rounded-md bg-white shadow-sm">
-          <div className="flex flex-wrap justify-between gap-3 bg-[#edf2f6] p-4">
-            <button className="inline-flex items-center gap-2 rounded bg-white px-4 py-2 text-sm font-bold"><Filter className="h-4 w-4" />Filters</button>
-            <span className="rounded bg-[#d7f5ff] px-4 py-2 text-sm font-bold text-[#07576c]">Selected: 0 items</span>
+          <div className="flex flex-wrap items-center gap-3 bg-[#edf2f6] p-4">
+            <div className="flex items-center gap-2 rounded bg-white px-3 py-2 text-sm font-semibold text-[#7a838d] flex-1 min-w-48">
+              <Search className="h-4 w-4 shrink-0" />
+              <input
+                className="flex-1 bg-transparent outline-none"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <select
+              className="rounded bg-white px-4 py-2 text-sm font-bold"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All Categories</option>
+              <option value="electronics">Electronics</option>
+              <option value="clothing">Clothing</option>
+              <option value="grocery">Grocery</option>
+              <option value="restaurant">Restaurant</option>
+              <option value="other">Other</option>
+            </select>
+            <select
+              className="rounded bg-white px-4 py-2 text-sm font-bold"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
 
           {loading ? (
              <div className="py-12 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-[#0f756b]" /></div>
-          ) : products.length > 0 ? (
+          ) : filteredProducts.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left">
                 <thead>
@@ -490,7 +528,7 @@ export function ProductsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <tr className="border-b border-[#edf2f6] hover:bg-[#f8fafb]" key={product._id}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -515,12 +553,22 @@ export function ProductsPage() {
             </div>
           ) : (
             <div className="py-12 text-center">
-              <PackagePlus className="mx-auto h-16 w-16 text-[#c8d1da]" />
-              <p className="mt-4 text-lg font-extrabold text-[#626c76]">No products yet</p>
-              <p className="mt-1 text-sm font-semibold text-[#7a838d]">Add your first product to get started.</p>
-              <Link className="mt-4 inline-flex items-center gap-2 rounded-md bg-[#0f756b] px-5 py-2.5 font-extrabold text-white" to={NEW_PRODUCT_ROUTE}>
-                <Plus className="h-4 w-4" />Add Product
-              </Link>
+              {products.length === 0 ? (
+                <>
+                  <PackagePlus className="mx-auto h-16 w-16 text-[#c8d1da]" />
+                  <p className="mt-4 text-lg font-extrabold text-[#626c76]">No products yet</p>
+                  <p className="mt-1 text-sm font-semibold text-[#7a838d]">Add your first product to get started.</p>
+                  <Link className="mt-4 inline-flex items-center gap-2 rounded-md bg-[#0f756b] px-5 py-2.5 font-extrabold text-white" to={NEW_PRODUCT_ROUTE}>
+                    <Plus className="h-4 w-4" />Add Product
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Search className="mx-auto h-12 w-12 text-[#c8d1da]" />
+                  <p className="mt-4 text-lg font-extrabold text-[#626c76]">No products found</p>
+                  <p className="mt-1 text-sm font-semibold text-[#7a838d]">Try adjusting your search or filters.</p>
+                </>
+              )}
             </div>
           )}
         </section>
@@ -1420,6 +1468,7 @@ export function PublishPage() {
   const { user } = useAuth();
   const [store, setStore] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -1437,6 +1486,21 @@ export function PublishPage() {
       console.error("Publishing failed", err);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleShare = async () => {
+    const storeUrl = `${window.location.origin}/store/${store?.slug || (storeName.toLowerCase().replace(/\s+/g, "-"))}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${storeName} on ShopGenie`, url: storeUrl });
+      } else {
+        await navigator.clipboard.writeText(storeUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      }
+    } catch (err) {
+      console.error("Share failed", err);
     }
   };
 
@@ -1475,7 +1539,9 @@ export function PublishPage() {
             </div>
             {store?.isPublished ? (
               <>
-                <button className="mt-5 w-full rounded-md bg-[#2e333b] py-3 font-extrabold text-white">Share Site</button>
+                <button className="mt-5 w-full rounded-md bg-[#2e333b] py-3 font-extrabold text-white" onClick={handleShare} type="button">
+                  {copied ? "Link Copied!" : "Share Site"}
+                </button>
                 <Link className="mt-3 block rounded-md bg-[#a6eadf] py-3 font-extrabold text-[#0f6f66]" to={DASHBOARD_ROUTE}>Go to Dashboard</Link>
               </>
             ) : (

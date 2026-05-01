@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ArrowLeft, HelpCircle, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, HelpCircle, Mail, Loader2, ShieldCheck } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../context/AuthContext";
 import { CATEGORY_ROUTE, DASHBOARD_ROUTE, LOGIN_ROUTE } from "../routes";
+import { apiFetch } from "../utils/apiFetch";
 
 const otpSlots = Array.from({ length: 6 }, (_, index) => index);
 
@@ -14,6 +15,8 @@ export default function VerifyAccountPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const maskedEmail = user?.email
     ? user.email.replace(/(.{1,3})(.*)(@.*)/, "$1***$3")
@@ -65,6 +68,22 @@ export default function VerifyAccountPage() {
       setCode(Array(6).fill(""));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true);
+    setResent(false);
+    try {
+      await apiFetch("/api/auth/resend-verification", {
+        method: "POST",
+      });
+      setResent(true);
+      setTimeout(() => setResent(false), 5000);
+    } catch (err) {
+      setError(err.message || "Failed to resend code. Please try again.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -159,8 +178,13 @@ export default function VerifyAccountPage() {
 
           <p className="mt-8 text-center text-sm font-medium text-[#6f7680]">
             Didn&apos;t receive a code?{" "}
-            <button className="font-extrabold text-[#0f6f66]" type="button">
-              Resend code
+            <button
+              className="font-extrabold text-[#0f6f66] disabled:opacity-50"
+              disabled={resending}
+              onClick={handleResend}
+              type="button"
+            >
+              {resending ? <><Loader2 className="inline h-3 w-3 animate-spin mr-1" />Sending...</> : (resent ? "Sent! Check your inbox" : "Resend code")}
             </button>
           </p>
 
