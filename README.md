@@ -8,10 +8,10 @@
 
 | Resource | Link |
 |----------|------|
-| 🎨 **Figma Design** | [View Figma](#) |
+| 🎨 **Figma Design** | [View Figma](https://www.figma.com/design/ieesGywTDd6S66Zvc4viVz/Untitled?node-id=0-1&t=QgeC3tfIrLBw0HeB-1) |
 | 🌐 **Live Demo (Frontend)** | [shop-genie-six.vercel.app](https://shop-genie-six.vercel.app) |
-| 📡 **Backend API** | [Backend Deployed Link](#) |
-| 📋 **Postman Documentation** | [Postman Docs](#) |
+| 📡 **Backend API** | [Backend Deployed Link](https://shop-genie-xlgt.onrender.com/) |
+| 📋 **Postman Documentation** | [Postman Docs](https://documenter.getpostman.com/view/50840769/2sBXqKoLD2) |
 | 🎬 **YouTube Demo** | [Watch Demo](#) |
 | 📂 **GitHub Repository** | [github.com/jontypatel1107/shop_genie](https://github.com/jontypatel1107/shop_genie) |
 
